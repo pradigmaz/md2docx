@@ -1,0 +1,7 @@
+python-docx>=1.1.0
+mistune>=3.0.2
+matplotlib>=3.7.0
+flake8>=7.0.0
+ziamath>=0.10.0
+cairosvg>=2.7.0
+Pillow>=10.0.0
