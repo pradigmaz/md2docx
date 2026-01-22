@@ -2,6 +2,7 @@
 Markdown parsing and AST processing module.
 """
 
+import re
 import mistune
 from .document_builder import DocumentBuilder
 from docx.shared import Pt, Cm
@@ -13,8 +14,45 @@ class MarkdownProcessor:
     def __init__(self, builder: DocumentBuilder):
         self.builder = builder
     
+    def _fix_broken_table_lines(self, text: str) -> str:
+        """Fix table lines that were broken by text wrapping.
+        
+        Some editors wrap long lines, breaking markdown tables.
+        This joins lines that appear to be continuations of table rows.
+        """
+        lines = text.split('\n')
+        fixed_lines = []
+        i = 0
+        
+        while i < len(lines):
+            line = lines[i]
+            
+            # Check if this looks like a table row (starts with |)
+            if line.strip().startswith('|'):
+                # A complete table row should end with |
+                # Keep joining lines until we get a complete row
+                while not line.rstrip().endswith('|') and i + 1 < len(lines):
+                    next_line = lines[i + 1]
+                    # If next line starts with |, it's a new row, stop joining
+                    if next_line.strip().startswith('|'):
+                        break
+                    # If next line is empty, stop joining
+                    if not next_line.strip():
+                        break
+                    # Join the continuation
+                    line = line.rstrip() + next_line.lstrip()
+                    i += 1
+            
+            fixed_lines.append(line)
+            i += 1
+        
+        return '\n'.join(fixed_lines)
+    
     def parse(self, text: str) -> list:
         """Parse markdown text to AST."""
+        # Fix broken table lines first
+        text = self._fix_broken_table_lines(text)
+        
         # Extract LaTeX before parsing (prevents mistune from breaking formulas)
         text, self.builder.latex_blocks = self.builder.latex.extract_blocks(text)
         text, self.builder.latex_inlines = self.builder.latex.extract_inlines(text)
@@ -274,11 +312,14 @@ class MarkdownProcessor:
         if ntype == "text":
             text = node.get("raw", "")
             
+            # Check for markers first (from pre-extracted formulas)
             if self.builder.latex.block_marker_pattern.search(text):
-                # Block formulas in cells - render as inline with width limit
                 self.builder.process_block_markers(text, paragraph)
             elif self.builder.latex.inline_marker_pattern.search(text):
                 self.builder.process_inline_markers(text, paragraph, bold=bold, italic=italic, max_width=max_width)
+            # Check for raw $...$ formulas (not extracted in table cells)
+            elif self.builder.latex.inline_pattern.search(text):
+                self._render_text_with_inline_formulas(text, paragraph, bold, italic, max_width)
             else:
                 self.builder.add_text_run(paragraph, text, bold=bold, italic=italic)
         
@@ -304,6 +345,26 @@ class MarkdownProcessor:
             run = paragraph.add_run(f"{text} ({url})")
             run.bold = bold
             run.italic = italic
+    
+    def _render_text_with_inline_formulas(self, text: str, paragraph, bold: bool, italic: bool, max_width: float):
+        """Render text containing raw $...$ inline formulas."""
+        pattern = self.builder.latex.inline_pattern
+        last_end = 0
+        
+        for match in pattern.finditer(text):
+            # Add text before formula
+            if match.start() > last_end:
+                before_text = text[last_end:match.start()]
+                self.builder.add_text_run(paragraph, before_text, bold=bold, italic=italic)
+            
+            # Render formula
+            formula = match.group(1)
+            self.builder.formulas.add_inline_formula(formula, paragraph, bold=bold, italic=italic, max_width=max_width)
+            last_end = match.end()
+        
+        # Add remaining text
+        if last_end < len(text):
+            self.builder.add_text_run(paragraph, text[last_end:], bold=bold, italic=italic)
     
     def _render_children(self, children: list, paragraph):
         """Render list of child nodes."""

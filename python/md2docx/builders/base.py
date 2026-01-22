@@ -129,34 +129,66 @@ class DocumentBuilder:
         from docx.shared import Cm
         from docx.oxml.ns import qn
         from docx.oxml import OxmlElement
+        from docx.enum.table import WD_TABLE_ALIGNMENT
         
         table = self.doc.add_table(rows=rows, cols=cols)
         table.style = "Table Grid"
-        table.autofit = False
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
         
         # Available width: A4 (21cm) - left margin (3cm) - right margin (1.5cm) = 16.5cm
         available_width = 16.5
         
         # Set column widths based on content type
-        # For 3-column tables (like variants): narrow | wide | medium
         if cols == 3:
             widths = [Cm(1.5), Cm(9), Cm(6)]  # Total 16.5cm
+        elif cols == 6:
+            # For 6-column variant tables: Вариант, N, Density, Seed, ε, Примечание
+            widths = [Cm(1.5), Cm(2.5), Cm(3), Cm(2), Cm(3), Cm(4.5)]  # Total 16.5cm
         else:
             # Equal widths for other tables
             col_width = Cm(available_width / cols)
             widths = [col_width] * cols
         
-        # Set table width explicitly
+        # Set table width and layout explicitly
         tbl = table._tbl
         tblPr = tbl.tblPr if tbl.tblPr is not None else OxmlElement('w:tblPr')
+        
+        # Set table width
         tblW = OxmlElement('w:tblW')
         tblW.set(qn('w:w'), str(int(available_width * 567)))  # Convert cm to twips
         tblW.set(qn('w:type'), 'dxa')
+        # Remove existing tblW if any
+        for existing in tblPr.findall(qn('w:tblW')):
+            tblPr.remove(existing)
         tblPr.append(tblW)
+        
+        # Set fixed table layout to prevent auto-resizing
+        tblLayout = OxmlElement('w:tblLayout')
+        tblLayout.set(qn('w:type'), 'fixed')
+        # Remove existing tblLayout if any
+        for existing in tblPr.findall(qn('w:tblLayout')):
+            tblPr.remove(existing)
+        tblPr.append(tblLayout)
+        
         if tbl.tblPr is None:
             tbl.insert(0, tblPr)
         
-        # Set column widths
+        # Set column widths via tblGrid for proper fixed layout
+        tblGrid = tbl.tblGrid
+        if tblGrid is None:
+            tblGrid = OxmlElement('w:tblGrid')
+            tbl.insert(1, tblGrid)
+        else:
+            # Clear existing gridCol elements
+            for child in list(tblGrid):
+                tblGrid.remove(child)
+        
+        for width in widths:
+            gridCol = OxmlElement('w:gridCol')
+            gridCol.set(qn('w:w'), str(int(width.cm * 567)))
+            tblGrid.append(gridCol)
+        
+        # Set column widths on cells
         for row in table.rows:
             for idx, cell in enumerate(row.cells):
                 if idx < len(widths):
@@ -171,6 +203,9 @@ class DocumentBuilder:
                     for existing in tcPr.findall(qn('w:tcW')):
                         tcPr.remove(existing)
                     tcPr.append(tcW)
+        
+        # Disable autofit to keep fixed widths
+        table.autofit = False
         
         return table
     

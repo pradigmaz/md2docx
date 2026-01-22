@@ -109,6 +109,9 @@ class LaTeXRenderer:
     
     def _render_ziamath(self, formula: str) -> str:
         """Render using ziamath."""
+        # Normalize formula to avoid rendering issues
+        formula = self._normalize_for_ziamath(formula)
+        
         latex = zm.Latex(formula)
         svg = latex.svg()
         
@@ -143,6 +146,19 @@ class LaTeXRenderer:
         self.temp_files.append(temp.name)
         return temp.name
     
+    def _normalize_for_ziamath(self, formula: str) -> str:
+        """Normalize LaTeX for ziamath rendering.
+        
+        Ziamath has issues with \\left and \\right delimiters causing
+        extremely tall SVG output. Replace with regular delimiters.
+        """
+        # Remove \left and \right - they cause height issues in ziamath
+        formula = re.sub(r'\\left\s*([(\[{|])', r'\1', formula)
+        formula = re.sub(r'\\right\s*([)\]}|])', r'\1', formula)
+        formula = re.sub(r'\\left\s*\\.', '', formula)  # \left.
+        formula = re.sub(r'\\right\s*\\.', '', formula)  # \right.
+        return formula
+    
     def _normalize_for_mathtext(self, formula: str) -> str:
         """Normalize LaTeX for matplotlib mathtext."""
         if self.use_tex:
@@ -163,7 +179,9 @@ class LaTeXRenderer:
             idx = len(blocks)
             # m.group(1) is $$...$$ style, m.group(2) is $\n...\n$ style
             formula = m.group(1) or m.group(2)
-            blocks[idx] = formula.strip()
+            # Normalize whitespace - replace newlines with spaces
+            formula = ' '.join(formula.split())
+            blocks[idx] = formula
             # Add blank lines around marker so mistune treats it as separate paragraph
             return f"\n\n%%LATEX_BLOCK:{idx}%%\n\n"
         
