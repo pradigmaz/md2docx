@@ -34,15 +34,21 @@ class LaTeXRenderer:
         self.enabled = self._check_support()
         
         # Regex patterns for LaTeX formulas
-        # Block formulas: $$...$$ OR $ on its own line ... $ on its own line
+        # Block formulas: $$...$$ OR $ on its own line ... $ on its own line OR \[...\]
         self.block_pattern = re.compile(
             r"\$\$(.+?)\$\$"  # $$...$$ style
             r"|"
-            r"(?:^|\n)\$[ \t]*\n(.*?)\n[ \t]*\$(?=\n|$)",  # $ on own line
+            r"(?:^|\n)\$[ \t]*\n(.*?)\n[ \t]*\$(?=\n|$)"  # $ on own line
+            r"|"
+            r"\\\[(.+?)\\\]",  # \[...\] style (LaTeX display math)
             re.DOTALL
         )
-        # Inline formulas: $...$ (single line, no newlines inside)
-        self.inline_pattern = re.compile(r"(?<!\$)\$(?!\$)([^$\n]+?)\$(?!\$)")
+        # Inline formulas: $...$ (single line, no newlines inside) OR \(...\)
+        self.inline_pattern = re.compile(
+            r"(?<!\$)\$(?!\$)([^$\n]+?)\$(?!\$)"  # $...$ style
+            r"|"
+            r"\\\((.+?)\\\)"  # \(...\) style (LaTeX inline math)
+        )
         self.block_marker_pattern = re.compile(r"%%LATEX_BLOCK:(\d+)%%")
         self.inline_marker_pattern = re.compile(r"%%LATEX_INLINE:(\d+)%%")
     
@@ -172,13 +178,13 @@ class LaTeXRenderer:
         return re.sub(r"\\text\{([^}]*)\}", replace_text, formula)
     
     def extract_blocks(self, text: str) -> tuple[str, dict[int, str]]:
-        """Extract block formulas ($$...$$ or $\\n...\\n$) and replace with markers."""
+        """Extract block formulas ($$...$$, $\n...\n$, or \[...\]) and replace with markers."""
         blocks = {}
         
         def replace(m):
             idx = len(blocks)
-            # m.group(1) is $$...$$ style, m.group(2) is $\n...\n$ style
-            formula = m.group(1) or m.group(2)
+            # m.group(1) is $$...$$ style, m.group(2) is $\n...\n$ style, m.group(3) is \[...\] style
+            formula = m.group(1) or m.group(2) or m.group(3)
             # Normalize whitespace - replace newlines with spaces
             formula = ' '.join(formula.split())
             blocks[idx] = formula
@@ -188,12 +194,13 @@ class LaTeXRenderer:
         return self.block_pattern.sub(replace, text), blocks
     
     def extract_inlines(self, text: str) -> tuple[str, dict[int, str]]:
-        """Extract $...$ inline formulas and replace with markers."""
+        """Extract $...$ or \(...\) inline formulas and replace with markers."""
         inlines = {}
         
         def replace(m):
             idx = len(inlines)
-            inlines[idx] = m.group(1)
+            # m.group(1) is $...$ style, m.group(2) is \(...\) style
+            inlines[idx] = m.group(1) or m.group(2)
             return f"%%LATEX_INLINE:{idx}%%"
         
         return self.inline_pattern.sub(replace, text), inlines
