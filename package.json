@@ -9,7 +9,8 @@
     "electron:dev": "wait-on http://localhost:5173 && electron .",
     "build": "vite build",
     "electron:build": "electron-builder",
-    "dist": "npm run build && npm run electron:build"
+    "dist": "npm run build && npm run electron:build",
+    "setup:python": "cd python && python -m venv venv && venv\\Scripts\\activate && pip install -r requirements.txt"
   },
   "keywords": ["markdown", "docx", "converter", "latex", "electron"],
   "author": "User",
@@ -41,15 +42,28 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "python/**/*"
+      "python/**/*",
+      "!python/venv/**/*",
+      "!python/__pycache__/**/*",
+      "!**/*.pyc"
     ],
     "win": {
-      "target": "nsis",
+      "target": ["nsis", "portable"],
       "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     },
     "mac": {
       "target": "dmg",
       "icon": "public/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Utility"
     }
   }
 }

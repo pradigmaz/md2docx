@@ -62,10 +62,11 @@ class FormulaBuilder:
                     scale = min(1.0, max_w / w_pt)
                     run.add_picture(png_path, width=Pt(w_pt * scale), height=Pt(h_pt * scale))
                 else:
-                    # Scale inline formula to match text height
-                    target_h = font_size * 1.3
-                    max_w = max_width if max_width else 300
-                    scale = min(1.0, target_h / h_pt, max_w / w_pt)
+                    # Scale inline formula - allow taller formulas to avoid excessive width
+                    target_h = font_size * 1.8  # Allow more height for better proportions
+                    max_w = max_width if max_width else 250
+                    # Prioritize width constraint over height
+                    scale = min(1.0, max_w / w_pt) if w_pt > max_w else min(1.0, target_h / h_pt)
                     run.add_picture(png_path, width=Pt(w_pt * scale), height=Pt(h_pt * scale))
                 return True
             except Exception:

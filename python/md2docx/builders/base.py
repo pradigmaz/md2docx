@@ -236,5 +236,12 @@ class DocumentBuilder:
     
     def save(self, path: str):
         """Save document and cleanup."""
-        self.doc.save(path)
-        self.formulas.cleanup()
+        try:
+            self.doc.save(path)
+        except PermissionError:
+            raise PermissionError(
+                f"Не удалось сохранить файл: '{path}'\n"
+                "Файл открыт в другой программе (Word). Закройте его и попробуйте снова."
+            )
+        finally:
+            self.formulas.cleanup()

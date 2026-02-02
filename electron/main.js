@@ -48,7 +48,6 @@ app.on('activate', () => {
 ipcMain.handle('convert-file', async (event, filePath, settings) => {
   return new Promise((resolve, reject) => {
     const pythonDir = path.join(__dirname, '../python')
-    const venvPython = path.join(__dirname, '../venv/bin/python')
     const outputDir = path.dirname(filePath)
     const outputFile = path.join(outputDir, path.basename(filePath, '.md') + '.docx')
 
@@ -62,12 +61,21 @@ ipcMain.handle('convert-file', async (event, filePath, settings) => {
     // Check if venv exists, log which python we're using
     const fs = require('fs')
     let pythonCmd
-    if (fs.existsSync(venvPython)) {
-      pythonCmd = venvPython
-      console.log('Using venv python:', pythonCmd)
+    
+    // Windows paths for venv
+    const venvPythonWin = path.join(__dirname, '../python/venv/Scripts/python.exe')
+    const venvPythonUnix = path.join(__dirname, '../python/venv/bin/python')
+    
+    if (process.platform === 'win32' && fs.existsSync(venvPythonWin)) {
+      pythonCmd = venvPythonWin
+      console.log('Using Windows venv python:', pythonCmd)
+    } else if (fs.existsSync(venvPythonUnix)) {
+      pythonCmd = venvPythonUnix
+      console.log('Using Unix venv python:', pythonCmd)
     } else {
-      pythonCmd = 'python3.14'
-      console.log('Venv not found at', venvPython, ', using python3.14')
+      // Fallback to system python
+      pythonCmd = process.platform === 'win32' ? 'python' : 'python3'
+      console.log('Venv not found, using system python:', pythonCmd)
     }
 
     const pythonProcess = spawn(pythonCmd, args, {
@@ -90,7 +98,12 @@ ipcMain.handle('convert-file', async (event, filePath, settings) => {
       if (code === 0) {
         resolve({ outputPath: outputFile })
       } else {
-        reject(new Error(`Conversion failed: ${stderr}`))
+        // Check for permission error (file open in Word)
+        if (stderr.includes('PermissionError') || stderr.includes('Permission denied')) {
+          reject(new Error('Файл открыт в Word или другой программе. Закройте его и попробуйте снова.'))
+        } else {
+          reject(new Error(`Conversion failed: ${stderr}`))
+        }
       }
     })
   })
