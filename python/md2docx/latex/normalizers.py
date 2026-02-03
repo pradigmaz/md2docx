@@ -8,14 +8,29 @@ import re
 def normalize_for_ziamath(formula: str) -> str:
     """Normalize LaTeX for ziamath rendering.
     
-    Ziamath has issues with \\left and \\right delimiters causing
-    extremely tall SVG output. Replace with regular delimiters.
+    Ziamath uses ziafont and supports most LaTeX math.
+    Some adjustments needed for compatibility.
     """
-    # Remove \left and \right - they cause height issues in ziamath
+    # Handle multiple primes (derivatives) - f'''(x) -> f^{(3)}(x)
+    # Must do this BEFORE other processing
+    formula = re.sub(r"(\w)''''", r"\1^{(4)}", formula)  # 4th derivative
+    formula = re.sub(r"(\w)'''", r"\1^{(3)}", formula)   # 3rd derivative  
+    formula = re.sub(r"(\w)''", r"\1^{\\prime\\prime}", formula)  # 2nd derivative
+    formula = re.sub(r"(\w)'(?!')", r"\1^{\\prime}", formula)  # 1st derivative (not followed by another ')
+    
+    # Fix ^T after matrix environments - wrap matrix in braces
+    # \end{pmatrix}^T -> \end{pmatrix}}^T (with opening brace before \begin)
+    for env in ['pmatrix', 'bmatrix', 'vmatrix', 'Bmatrix', 'matrix']:
+        # Pattern: \begin{env}...\end{env}^something
+        pattern = rf'(\\begin\{{{env}\}}.*?\\end\{{{env}\}})(\^)'
+        formula = re.sub(pattern, r'{\1}\2', formula, flags=re.DOTALL)
+    
+    # Remove \left and \right - they can cause height issues in ziamath
     formula = re.sub(r'\\left\s*([(\[{|])', r'\1', formula)
     formula = re.sub(r'\\right\s*([)\]}|])', r'\1', formula)
     formula = re.sub(r'\\left\s*\\.', '', formula)  # \left.
     formula = re.sub(r'\\right\s*\\.', '', formula)  # \right.
+    
     return formula
 
 

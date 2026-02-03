@@ -111,15 +111,24 @@ class NodeHandlers:
         
         return current_type
     
-    def handle_list_item(self, node: dict, list_type: str, is_first: bool = False):
+    def handle_list_item(self, node: dict, list_type: str, is_first: bool = False, level: int = 0):
         """Handle list item node."""
         ordered = list_type == "List Number"
-        p = self.builder.add_list_item(ordered=ordered, restart=(is_first and ordered))
+        p = self.builder.add_list_item(ordered=ordered, restart=(is_first and ordered), level=level)
         
         for child in node.get("children", []):
             ctype = child.get("type")
             if ctype in ["paragraph", "block_text"]:
                 self.inline.render_children(child.get("children", []), p)
+            elif ctype == "list":
+                # Handle nested list
+                nested_ordered = child.get("attrs", {}).get("ordered", False)
+                nested_list_type = "List Number" if nested_ordered else "List Bullet"
+                for idx, nested_item in enumerate(child.get("children", [])):
+                    self.handle_list_item(nested_item, nested_list_type, is_first=(idx == 0), level=level + 1)
+            elif ctype == "table":
+                # Handle table inside list item
+                self.handle_table(child)
             else:
                 self.inline.render_children([child], p)
     
@@ -163,6 +172,38 @@ class NodeHandlers:
             else:
                 self.inline.render_children([child], p)
     
+    def _merge_text_nodes(self, children: list) -> list:
+        """Merge consecutive text nodes into one.
+        
+        Mistune splits text on backslashes in tables, which breaks LaTeX formulas.
+        When we see a standalone backslash node, it was originally \\\\ (double backslash).
+        """
+        if not children:
+            return children
+        
+        merged = []
+        current_text = ""
+        
+        for child in children:
+            if child.get("type") == "text":
+                raw = child.get("raw", "")
+                # If this is a standalone backslash, it was originally \\
+                # (mistune splits on \\ and keeps one \ as separate node)
+                if raw == "\\":
+                    current_text += "\\\\"  # Restore double backslash
+                else:
+                    current_text += raw
+            else:
+                if current_text:
+                    merged.append({"type": "text", "raw": current_text})
+                    current_text = ""
+                merged.append(child)
+        
+        if current_text:
+            merged.append({"type": "text", "raw": current_text})
+        
+        return merged
+    
     def handle_table(self, node: dict):
         """Handle table node."""
         head = body = None
@@ -194,7 +235,9 @@ class NodeHandlers:
             p = cell.paragraphs[0]
             p.paragraph_format.first_line_indent = Cm(0)
             max_w = col_widths_pt[col] - 10 if col < len(col_widths_pt) else 150
-            self.inline.render_children_in_cell(cell_node.get("children", []), p, max_w)
+            # Merge text nodes to fix LaTeX formulas split by mistune
+            children = self._merge_text_nodes(cell_node.get("children", []))
+            self.inline.render_children_in_cell(children, p, max_w)
             for run in p.runs:
                 run.bold = True
         
@@ -206,4 +249,6 @@ class NodeHandlers:
                     p = cell.paragraphs[0]
                     p.paragraph_format.first_line_indent = Cm(0)
                     max_w = col_widths_pt[col] - 10 if col < len(col_widths_pt) else 150
-                    self.inline.render_children_in_cell(cell_node.get("children", []), p, max_w)
+                    # Merge text nodes to fix LaTeX formulas split by mistune
+                    children = self._merge_text_nodes(cell_node.get("children", []))
+                    self.inline.render_children_in_cell(children, p, max_w)

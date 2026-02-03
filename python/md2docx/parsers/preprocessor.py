@@ -42,17 +42,50 @@ class TextPreprocessor:
         
         return '\n'.join(fixed_lines)
     
+    def fix_indented_tables(self, text: str) -> str:
+        """Remove leading indentation from table rows.
+        
+        Tables inside list items have indentation which prevents
+        mistune from recognizing them as tables.
+        """
+        lines = text.split('\n')
+        result = []
+        in_table = False
+        
+        for line in lines:
+            stripped = line.strip()
+            
+            # Check if this is a table row (starts and ends with |)
+            if stripped.startswith('|') and stripped.endswith('|'):
+                in_table = True
+                # Remove leading whitespace from table rows
+                result.append(stripped)
+            elif in_table and stripped.startswith('|'):
+                # Continuation of table (might not end with | if broken)
+                result.append(stripped)
+            else:
+                in_table = False
+                result.append(line)
+        
+        return '\n'.join(result)
+    
     def clean_text(self, text: str) -> str:
         """Clean up garbage characters and formatting artifacts.
         
         Removes things like repeated punctuation (,,.), trailing commas, etc.
         """
+        # ,: -> : (comma before colon is OCR artifact, e.g. "классы,:" -> "классы:")
+        text = re.sub(r',:', ':', text)
         # ,. or ,,. or ,,,. -> . (keep the period)
         text = re.sub(r',+\.', '.', text)
         # ?. or ?.. -> ? (question mark is already sentence-ending)
         text = re.sub(r'\?\.+', '?', text)
+        # ?, or ?,. -> ? (comma/period after question mark is garbage)
+        text = re.sub(r'\?[,.]+', '?', text)
         # !. or !.. -> !
         text = re.sub(r'!\.+', '!', text)
+        # !, -> ! (comma after exclamation is garbage)
+        text = re.sub(r'!,+', '!', text)
         # ,, at end of sentence (before newline or end of text) -> . (likely OCR artifact)
         text = re.sub(r',,(\s*\n)', r'.\1', text)
         text = re.sub(r',,$', '.', text)
@@ -69,5 +102,6 @@ class TextPreprocessor:
     def preprocess(self, text: str) -> str:
         """Apply all preprocessing steps."""
         text = self.fix_broken_table_lines(text)
+        text = self.fix_indented_tables(text)
         text = self.clean_text(text)
         return text

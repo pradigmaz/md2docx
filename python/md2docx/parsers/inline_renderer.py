@@ -55,6 +55,12 @@ class InlineRenderer:
         
         elif ntype in ["softbreak", "linebreak"]:
             paragraph.add_run("\n")
+        
+        elif ntype == "inline_html":
+            # Handle HTML tags like <br>, <br/>, <br />
+            raw = node.get("raw", "").strip().lower()
+            if raw in ["<br>", "<br/>", "<br />"]:
+                paragraph.add_run("\n")
     
     def render_children_in_cell(self, children: list, paragraph, max_width: float):
         """Render children in a table cell with width constraint."""
@@ -102,6 +108,15 @@ class InlineRenderer:
             run = paragraph.add_run(f"{text} ({url})")
             run.bold = bold
             run.italic = italic
+        
+        elif ntype in ["softbreak", "linebreak"]:
+            paragraph.add_run("\n")
+        
+        elif ntype == "inline_html":
+            # Handle HTML tags like <br>, <br/>, <br />
+            raw = node.get("raw", "").strip().lower()
+            if raw in ["<br>", "<br/>", "<br />"]:
+                paragraph.add_run("\n")
     
     def _render_text_with_inline_formulas(self, text: str, paragraph, 
                                            bold: bool, italic: bool, max_width: float):
@@ -117,7 +132,7 @@ class InlineRenderer:
             
             # Render formula
             formula = match.group(1)
-            self.builder.formulas.add_inline_formula(formula, paragraph, bold=bold, italic=italic, max_width=max_width)
+            self.builder.formulas.add_inline(paragraph, formula, self.builder.add_text_run, max_width=max_width)
             last_end = match.end()
         
         # Add remaining text

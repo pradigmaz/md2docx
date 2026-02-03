@@ -97,9 +97,9 @@ class DocumentBuilder:
         p.paragraph_format.line_spacing = self.settings["lineSpacing"]
         return p
     
-    def add_list_item(self, ordered: bool = False, restart: bool = False):
+    def add_list_item(self, ordered: bool = False, restart: bool = False, level: int = 0):
         """Add list item paragraph."""
-        return self.lists.add_list_item(ordered=ordered, restart=restart)
+        return self.lists.add_list_item(ordered=ordered, restart=restart, level=level)
     
     def add_code_block(self, code: str, language: str = ""):
         """Add code block without border."""

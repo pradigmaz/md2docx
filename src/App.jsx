@@ -17,15 +17,19 @@ function App() {
   })
   const [outputFile, setOutputFile] = useState(null)
   const [isConverting, setIsConverting] = useState(false)
+  const [error, setError] = useState(null)
 
   const handleConvert = async () => {
     if (!file) return
     setIsConverting(true)
+    setError(null)
+    setOutputFile(null)
     try {
       const result = await window.electronAPI.convertFile(file.path, settings)
       setOutputFile(result.outputPath)
-    } catch (error) {
-      console.error('Conversion failed:', error)
+    } catch (err) {
+      console.error('Conversion failed:', err)
+      setError(err.message || 'Произошла ошибка при конвертации')
     }
     setIsConverting(false)
   }
@@ -39,6 +43,25 @@ function App() {
           </h1>
           <p className="text-gray-600">Конвертер с поддержкой LaTeX</p>
         </header>
+
+        {/* Error notification */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl shadow-lg animate-fade-in">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div className="flex-1">
+                <h3 className="font-semibold text-red-800">Ошибка конвертации</h3>
+                <p className="text-red-700 mt-1">{error}</p>
+              </div>
+              <button
+                onClick={() => setError(null)}
+                className="text-red-400 hover:text-red-600 text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-6">
           <div className="bg-white rounded-xl shadow-lg p-6">

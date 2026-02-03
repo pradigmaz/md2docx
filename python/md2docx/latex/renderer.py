@@ -87,14 +87,25 @@ class LaTeXRenderer:
         if not self.enabled:
             return None
         
-        try:
-            if self.use_ziamath:
+        # Try ziamath first, fall back to matplotlib on error
+        if self.use_ziamath:
+            try:
                 return self._render_ziamath(formula)
-            else:
+            except Exception as e:
+                # Try matplotlib as fallback for complex formulas
+                if MATPLOTLIB_AVAILABLE:
+                    try:
+                        return self._render_matplotlib(formula, is_block)
+                    except Exception:
+                        pass
+                warnings.warn(f"Failed to render: {formula[:50]}... Error: {e}")
+                return None
+        else:
+            try:
                 return self._render_matplotlib(formula, is_block)
-        except Exception as e:
-            warnings.warn(f"Failed to render: {formula[:50]}... Error: {e}")
-            return None
+            except Exception as e:
+                warnings.warn(f"Failed to render: {formula[:50]}... Error: {e}")
+                return None
     
     def _render_ziamath(self, formula: str) -> str:
         """Render using ziamath."""
