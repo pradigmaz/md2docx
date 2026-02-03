@@ -35,7 +35,7 @@ class FormulaBuilder:
             return True
         return False
     
-    def add_inline(self, paragraph, formula: str, add_text_run_func, max_width: float = None) -> bool:
+    def add_inline(self, paragraph, formula: str, add_text_run_func, max_width: float = None, bold: bool = False, italic: bool = False) -> bool:
         """Add inline LaTeX formula to paragraph as PNG image.
         
         Args:
@@ -43,6 +43,8 @@ class FormulaBuilder:
             formula: LaTeX formula string
             add_text_run_func: Function to add text runs
             max_width: Maximum width in points (for table cells)
+            bold: Whether surrounding text is bold (for fallback)
+            italic: Whether surrounding text is italic (for fallback)
         """
         is_multi = self.is_multiline(formula)
         png_path = self.latex.render_to_png(formula, is_block=is_multi)
@@ -76,6 +78,8 @@ class FormulaBuilder:
         run = paragraph.add_run(f"${formula}$")
         run.font.name = self.settings["fontFamily"]
         run.font.size = Pt(self.settings["fontSize"])
+        run.bold = bold
+        run.italic = italic
         return False
     
     def add_block(self, formula: str):
@@ -107,7 +111,7 @@ class FormulaBuilder:
         run.font.name = self.settings["fontFamily"]
     
     def process_inline_markers(self, text: str, paragraph, add_text_run_func=None, bold: bool = False, italic: bool = False, max_width: float = None):
-        """Process text with %%LATEX_INLINE:id%% markers.
+        """Process text with ⟦LATEX_INLINE:id⟧ markers.
         
         Args:
             text: Text with inline markers
@@ -122,6 +126,12 @@ class FormulaBuilder:
         for i, part in enumerate(parts):
             if i % 2 == 0:
                 if part:
+                    # Replace regular spaces with non-breaking spaces near brackets
+                    # to prevent Word from breaking lines between bracket and formula
+                    # \u00A0 is non-breaking space
+                    part = part.replace(' (', '\u00A0(')
+                    part = part.replace(') ', ')\u00A0')
+                    
                     if add_text_run_func:
                         add_text_run_func(paragraph, part, bold=bold, italic=italic)
                     else:
@@ -131,7 +141,7 @@ class FormulaBuilder:
             else:
                 formula_id = int(part)
                 formula = self.latex_inlines.get(formula_id, "")
-                self.add_inline(paragraph, formula, add_text_run_func, max_width=max_width)
+                self.add_inline(paragraph, formula, add_text_run_func, max_width=max_width, bold=bold, italic=italic)
     
     def process_block_markers(self, text: str, paragraph, add_text_run_func):
         """Process text with %%LATEX_BLOCK:id%% markers."""

@@ -1,16 +1,13 @@
 """
-AST node handlers for markdown to DOCX conversion.
+Block-level node handlers for markdown AST.
 """
 
-from docx.shared import Pt, Cm, RGBColor
+from docx.shared import Pt, RGBColor
+import mistune
 
 
-class NodeHandlers:
-    """Handles different AST node types."""
-    
-    def __init__(self, builder, inline_renderer):
-        self.builder = builder
-        self.inline = inline_renderer
+class BlockHandlerMixin:
+    """Mixin for handling block-level nodes."""
     
     def handle_heading(self, node: dict):
         """Handle heading node."""
@@ -96,38 +93,13 @@ class NodeHandlers:
                 formula = self.builder.formulas.latex_blocks.get(content, "")
                 self.builder.formulas.add_block(formula)
     
-    def handle_list(self, node: dict, prev_list_type: str):
-        """Handle list node. Returns current list type."""
-        ordered = node.get("attrs", {}).get("ordered", False)
-        list_type = "List Number" if ordered else "List Bullet"
-        current_type = "ordered" if ordered else "bullet"
-        
-        children = node.get("children", [])
-        
-        for idx, item in enumerate(children):
-            restart = (idx == 0 and ordered and prev_list_type != current_type)
-            self.handle_list_item(item, list_type=list_type, is_first=restart)
-        
-        return current_type
-    
-    def handle_list_item(self, node: dict, list_type: str, is_first: bool = False):
-        """Handle list item node."""
-        ordered = list_type == "List Number"
-        p = self.builder.add_list_item(ordered=ordered, restart=(is_first and ordered))
-        
-        for child in node.get("children", []):
-            ctype = child.get("type")
-            if ctype in ["paragraph", "block_text"]:
-                self.inline.render_children(child.get("children", []), p)
-            else:
-                self.inline.render_children([child], p)
-    
     def handle_code_block(self, node: dict):
         """Handle code block node."""
         code = node.get("raw", "")
         lang = node.get("attrs", {}).get("info", "")
         style = node.get("style", "")
         
+        # Indented text without language is often just continuation text
         if style == "indent" and not lang:
             lines = code.strip().split('\n')
             for line in lines:
@@ -137,11 +109,20 @@ class NodeHandlers:
                     if self.builder.latex.block_marker_pattern.search(line):
                         self.builder.process_block_markers(line, p)
                     elif self.builder.latex.inline_marker_pattern.search(line):
-                        self.builder.process_inline_markers(line, p)
+                        self._parse_and_render_inline_text(line, p)
                     else:
-                        self.builder.add_text_run(p, line)
+                        self._parse_and_render_inline_text(line, p)
         else:
             self.builder.add_code_block(code, lang)
+    
+    def _parse_and_render_inline_text(self, text: str, paragraph):
+        """Parse text for inline markdown (bold, italic) and render."""
+        md = mistune.create_markdown(renderer=None)
+        ast = md(text)
+        if ast and ast[0].get("type") == "paragraph":
+            self.inline.render_children(ast[0].get("children", []), paragraph)
+        else:
+            self.builder.add_text_run(paragraph, text)
     
     def handle_blockquote(self, node: dict):
         """Handle blockquote node."""
@@ -151,48 +132,3 @@ class NodeHandlers:
                 self.inline.render_children(child.get("children", []), p)
             else:
                 self.inline.render_children([child], p)
-    
-    def handle_table(self, node: dict):
-        """Handle table node."""
-        head = body = None
-        for child in node.get("children", []):
-            if child.get("type") == "table_head":
-                head = child
-            elif child.get("type") == "table_body":
-                body = child
-        
-        if not head:
-            return
-        
-        head_cells = head.get("children", [])
-        num_cols = len(head_cells)
-        body_rows = body.get("children", []) if body else []
-        num_rows = 1 + len(body_rows)
-        
-        table = self.builder.add_table(num_rows, num_cols)
-        
-        # Column widths in points (1cm = 28.35pt)
-        if num_cols == 3:
-            col_widths_pt = [1.5 * 28.35, 9 * 28.35, 6 * 28.35]
-        else:
-            col_widths_pt = [16.5 / num_cols * 28.35] * num_cols
-        
-        # Header row
-        for col, cell_node in enumerate(head_cells):
-            cell = table.rows[0].cells[col]
-            p = cell.paragraphs[0]
-            p.paragraph_format.first_line_indent = Cm(0)
-            max_w = col_widths_pt[col] - 10 if col < len(col_widths_pt) else 150
-            self.inline.render_children_in_cell(cell_node.get("children", []), p, max_w)
-            for run in p.runs:
-                run.bold = True
-        
-        # Body rows
-        for row_idx, row_node in enumerate(body_rows):
-            for col, cell_node in enumerate(row_node.get("children", [])):
-                if col < num_cols:
-                    cell = table.rows[row_idx + 1].cells[col]
-                    p = cell.paragraphs[0]
-                    p.paragraph_format.first_line_indent = Cm(0)
-                    max_w = col_widths_pt[col] - 10 if col < len(col_widths_pt) else 150
-                    self.inline.render_children_in_cell(cell_node.get("children", []), p, max_w)

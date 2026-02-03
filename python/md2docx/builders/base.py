@@ -101,6 +101,10 @@ class DocumentBuilder:
         """Add list item paragraph."""
         return self.lists.add_list_item(ordered=ordered, restart=restart, level=level)
     
+    def add_list_continuation(self, justify: bool = True):
+        """Add continuation paragraph for list item."""
+        return self.lists.add_list_continuation(justify=justify)
+    
     def add_code_block(self, code: str, language: str = ""):
         """Add code block without border."""
         p = self.doc.add_paragraph()

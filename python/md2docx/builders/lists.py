@@ -15,6 +15,7 @@ class ListBuilder:
         self.doc = doc
         self.settings = settings
         self._ordered_counter = 0  # Manual counter for ordered lists
+        self._current_indent = 1.5  # Track current list indent
         self._setup_list_styles()
     
     def _setup_list_styles(self):
@@ -39,6 +40,7 @@ class ListBuilder:
         base_indent = 1.5
         level_indent = 0.75  # Additional indent per level
         left_indent = base_indent + (level * level_indent)
+        self._current_indent = left_indent  # Save for continuation paragraphs
         
         if ordered:
             # Use manual numbering for ordered lists
@@ -48,7 +50,7 @@ class ListBuilder:
                 self._ordered_counter += 1
             
             p = self.doc.add_paragraph()
-            p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
             p.paragraph_format.first_line_indent = Cm(0)
             p.paragraph_format.left_indent = Cm(left_indent)
             p.paragraph_format.space_after = Pt(0)
@@ -61,10 +63,28 @@ class ListBuilder:
         else:
             # Use bullet style for unordered lists
             p = self.doc.add_paragraph(style="List Bullet")
-            p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
             p.paragraph_format.first_line_indent = Cm(0)
             p.paragraph_format.left_indent = Cm(left_indent)
             p.paragraph_format.space_after = Pt(0)
             p.paragraph_format.space_before = Pt(0)
         
+        return p
+    
+    def add_list_continuation(self, justify: bool = True):
+        """Add continuation paragraph for list item (no bullet/number).
+        
+        Used for additional lines within a list item that should be
+        aligned with the list content but without a marker.
+        
+        Args:
+            justify: True for JUSTIFY alignment (long text), False for LEFT (short/formulas)
+        """
+        p = self.doc.add_paragraph()
+        alignment = WD_ALIGN_PARAGRAPH.JUSTIFY if justify else WD_ALIGN_PARAGRAPH.LEFT
+        p.paragraph_format.alignment = alignment
+        p.paragraph_format.first_line_indent = Cm(0)
+        p.paragraph_format.left_indent = Cm(self._current_indent)
+        p.paragraph_format.space_after = Pt(0)
+        p.paragraph_format.space_before = Pt(0)
         return p

@@ -69,6 +69,31 @@ class TextPreprocessor:
         
         return '\n'.join(result)
     
+    def fix_nested_list_indentation(self, text: str) -> str:
+        """Fix nested list items that have 4-space indentation.
+        
+        Mistune treats 4-space indented lines as code blocks.
+        Nested list items should use 2-space indentation.
+        """
+        lines = text.split('\n')
+        result = []
+        
+        for line in lines:
+            # Check if line starts with 4 spaces followed by list marker (* or -)
+            # and convert to 2-space indentation
+            match = re.match(r'^(    +)([*\-])\s+', line)
+            if match:
+                spaces = match.group(1)
+                marker = match.group(2)
+                rest = line[match.end():]
+                # Convert 4-space blocks to 2-space
+                new_indent = '  ' * (len(spaces) // 4)
+                result.append(f'{new_indent}{marker} {rest}')
+            else:
+                result.append(line)
+        
+        return '\n'.join(result)
+    
     def clean_text(self, text: str) -> str:
         """Clean up garbage characters and formatting artifacts.
         
@@ -99,9 +124,23 @@ class TextPreprocessor:
         text = re.sub(r'\s+([,.])', r'\1', text)
         return text
     
+    def merge_brackets_with_formulas(self, text: str) -> str:
+        """Merge parentheses with inline formulas.
+        
+        Converts ($formula$) to $(formula)$ so brackets render as part of formula.
+        This prevents Word from breaking lines between bracket and formula.
+        """
+        # ($...$): -> $(...)$: - include trailing colon
+        text = re.sub(r'\(\$([^$]+)\$\)([:;,.]?)', r'$(\1)\2$', text)
+        # [$...$] -> $[...]$
+        text = re.sub(r'\[\$([^$]+)\$\]([:;,.]?)', r'$[\1]\2$', text)
+        return text
+    
     def preprocess(self, text: str) -> str:
         """Apply all preprocessing steps."""
         text = self.fix_broken_table_lines(text)
         text = self.fix_indented_tables(text)
+        text = self.fix_nested_list_indentation(text)
+        text = self.merge_brackets_with_formulas(text)
         text = self.clean_text(text)
         return text
